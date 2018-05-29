@@ -1,4 +1,4 @@
-/* r2nxdbg - MIT - Copyright 2018 - rkx1209dev@gmail.com */
+/* radare - LGPL - Copyright 2018 - rkx1209dev@gmail.com */
 
 #include <r_userconf.h>
 #include <r_core.h>
@@ -8,12 +8,38 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <usb.h>
-#include "nxdbg.h"
 
 #define VENDOR_ID 0x057e
 #define PRODUCT_ID 0x3000
 
-extern RIOPlugin r_io_plugin_nxdbg;
+typedef struct {
+        usb_dev_handle *handle;
+} RIONxdbg;
+
+typedef struct {
+        uint32_t type;
+} DebuggerRequest;
+
+typedef struct {
+        uint32_t result;
+        uint32_t lenbytes;
+        void* data;
+} DebuggerResponse;
+
+static RIONxdbg*r_io_nxdbg_new(RIO *io) {
+	RIONxdbg *rnx = R_NEW0 (RIONxdbg);
+	if (!rnx) {
+		return NULL;
+	}
+        return rnx;
+}
+
+static void r_io_nxdbg_free(RIONxdbg *rnx) {
+        if (!rnx) {
+                return;
+        }
+        R_FREE (rnx);
+}
 
 struct usb_bus *r_usb_init() {
         usb_init();
@@ -65,8 +91,7 @@ error:
         return NULL;
 }
 
-void r_usb_close(usb_dev_handle *handle) {
-
+void r_usb_close() {
 	if(usb_release_interface(handle, 0)){
 		eprintf("usb_release_interface() failed. (%s)\n", usb_strerror());
 	}
@@ -82,10 +107,10 @@ static bool __check(RIO *io, const char *pathname, bool many) {
 static RIODesc *__open(RIO *io, const char *pathname, int rw, int mode) {
         struct usb_bus *bus;
 	struct usb_device *dev;
-        RNxdbg *rnx;
+        RIONxdbg *rnx;
         usb_dev_handle *handle;
 
-        rnx = r_nxdbg_new (io);
+        rnx = r_io_nxdbg_new (io);
         if (!rnx) {
                 goto error;
         }
@@ -108,38 +133,35 @@ static RIODesc *__open(RIO *io, const char *pathname, int rw, int mode) {
         io->cb_printf ("Opened usb connection\n");
         return r_io_desc_new (io, &r_io_plugin_nxdbg, pathname, R_IO_RW | R_IO_EXEC, mode, rnx);
 error:
-        r_nxdbg_free (rnx);
+        r_io_nxdbg_free (rnx);
         return NULL;
 }
 
 static int __close(RIODesc *fd) {
-        RNxdbg *rnx;
 	if (!fd || !fd->data) {
 		return -1;
 	}
-        rnx = fd->data;
-        r_usb_close(rnx->handle);
-        r_nxdbg_free (rnx);
+        r_usb_close();
 }
 
 static int __read(RIO *io, RIODesc *fd, ut8 *buf, int count) {
-        RNxdbg *rnx;
+        RIONxdbg *rnx;
 	if (!fd || !fd->data) {
 		return -1;
 	}
 	rnx = fd->data;
-        /* TODO */
         return count;
 }
 
 static int __write(RIO *io, RIODesc *fd, const ut8 *buf, int count) {
-        RNxdbg *rnx;
+        RIONxdbg *rnx;
         DebuggerRequest req;
 	if (!fd || !fd->data) {
 		return -1;
 	}
 	rnx = fd->data;
-        /* TODO */
+
+
         return count;
 }
 
@@ -149,7 +171,7 @@ RIOPlugin r_io_plugin_nxdbg = {
 	.license = "MIT",
 	.open = __open,
 	.close = __close,
-	.read = __read,
+	//.read = __read,
 	// .check = __plugin_open,
 	// .lseek = __lseek,
 	.write = __write,
