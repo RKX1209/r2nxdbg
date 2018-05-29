@@ -20,5 +20,6 @@ typedef struct {
 
 RNxdbg *r_nxdbg_new(RIO *io);
 void r_nxdbg_free(RNxdbg *rnx);
+RList *nxdbg_list_process(RNxdbg *rnx);
 
 #endif

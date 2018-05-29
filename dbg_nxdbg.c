@@ -8,179 +8,86 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <usb.h>
+#include "nxdbg.h"
 
-#define VENDOR_ID 0x057e
-#define PRODUCT_ID 0x3000
+RNxdbg *rnx;
 
-typedef struct {
-        usb_dev_handle *handle;
-} RIONxdbg;
+static int r_debug_nxdbg_init(RDebug *dbg) {
+	return true;
+}
 
-typedef struct {
-        uint32_t type;
-} DebuggerRequest;
+static int r_debug_nxdbg_attach(RDebug *dbg, int pid) {
+        RIODesc *desc = dbg->iob.io->desc;
+        eprintf("nxdbg attach\n");
+	if (!desc || !desc->plugin || !desc->plugin->name || !desc->data) {
+		return false;
+	}
+	if (strncmp (desc->plugin->name, "nxdbg", 6)) {
+		return false;
+	}
+	if (dbg->arch && strcmp (dbg->arch, "arm")) {
+		return false;
+	}
+	rnx = (RNxdbg *) desc->data;
 
-typedef struct {
-        uint32_t result;
-        uint32_t lenbytes;
-        void* data;
-} DebuggerResponse;
-
-static RIONxdbg*r_io_nxdbg_new(RIO *io) {
-	RIONxdbg *rnx = R_NEW0 (RIONxdbg);
 	if (!rnx) {
+		return false;
+	}
+        dbg->pid = 0;
+        return true;
+}
+
+static RList *r_debug_nxdbg_pids(RDebug *dbg, int pid) {
+	RListIter *it;
+        eprintf("nxdbg pids\n");
+	RList *ret = r_list_newf (free);
+	if (!ret) {
 		return NULL;
 	}
-        return rnx;
-}
 
-static void r_io_nxdbg_free(RIONxdbg *rnx) {
-        if (!rnx) {
-                return;
-        }
-        R_FREE (rnx);
-}
-
-struct usb_bus *r_usb_init() {
-        usb_init();
-        usb_find_busses();
-	usb_find_devices();
-	return(usb_get_busses());
-}
-
-struct usb_device *r_usb_find(struct usb_bus *busses, struct usb_device *dev) {
-	struct usb_bus *bus;
-	for(bus = busses; bus; bus = bus->next){
-		for(dev = bus->devices; dev; dev = dev->next) {
-			if((dev->descriptor.idVendor == VENDOR_ID) && (dev->descriptor.idProduct == PRODUCT_ID)){
-				return dev;
-			}
-		}
+	RList *pids = nxdbg_list_process(rnx);
+	if (!pids) {
+		return ret;
 	}
-	return NULL;
+	// r_list_foreach (pids, it, p) {
+	// 	RDebugPid *newpid = R_NEW0 (RDebugPid);
+	// 	if (!newpid) {
+	// 		r_list_free (ret);
+	// 		return NULL;
+	// 	}
+	// 	newpid->path = strdup (p->name);
+	// 	newpid->pid = p->uniqueid;
+	// 	newpid->status = 's';
+	// 	newpid->runnable = true;
+	// 	r_list_append (ret, newpid);
+	// }
+	// r_list_free (pids);
+	return ret;
 }
 
-struct usb_dev_handle *r_usb_open(struct usb_device *dev) {
-        struct usb_dev_handle *udev = NULL;
-
-	if((udev = usb_open(dev)) == NULL){
-		eprintf("usb_open Error.(%s)\n",usb_strerror());
-		goto error;
-	}
-
-	if(usb_set_configuration(udev, dev->config->bConfigurationValue) < 0 ) {
-		if(usb_detach_kernel_driver_np(udev, dev->config->interface->altsetting->bInterfaceNumber) < 0 ) {
-			eprintf("usb_set_configuration Error.\n");
-			eprintf("usb_detach_kernel_driver_np Error.(%s)\n",usb_strerror());
- 		}
-	}
-
-	if(usb_claim_interface(udev, dev->config->interface->altsetting->bInterfaceNumber) < 0 ) {
-		if(usb_detach_kernel_driver_np(udev,dev->config->interface->altsetting->bInterfaceNumber) < 0 ) {
-			eprintf("usb_claim_interface Error.\n");
-			eprintf("usb_detach_kernel_driver_np Error.(%s)\n",usb_strerror());
-		}
-	}
-
-	if(usb_claim_interface(udev, dev->config->interface->altsetting->bInterfaceNumber) < 0 ){
-		eprintf("usb_claim_interface Error.(%s)\n",usb_strerror());
-	}
-
-	return udev;
-error:
-        return NULL;
-}
-
-void r_usb_close() {
-	if(usb_release_interface(handle, 0)){
-		eprintf("usb_release_interface() failed. (%s)\n", usb_strerror());
-	}
-	if(usb_close(handle) < 0 ){
-		eprintf("usb_close Error.(%s)\n", usb_strerror());
-	}
-}
-
-static bool __check(RIO *io, const char *pathname, bool many) {
-	return g_str_has_prefix (pathname, "nxdbg://");
-}
-
-static RIODesc *__open(RIO *io, const char *pathname, int rw, int mode) {
-        struct usb_bus *bus;
-	struct usb_device *dev;
-        RIONxdbg *rnx;
-        usb_dev_handle *handle;
-
-        rnx = r_io_nxdbg_new (io);
-        if (!rnx) {
-                goto error;
-        }
-
-        if (!__check (io, pathname, false)) {
-                goto error;
-        }
-
-        bus = r_usb_init ();
-        dev = r_usb_find (bus, dev);
-        if (!dev) {
-                goto error;
-        }
-        io->cb_printf ("Initialized usb\n");
-        handle = r_usb_open (dev);
-        if (!handle) {
-                goto error;
-        }
-        rnx->handle = handle;
-        io->cb_printf ("Opened usb connection\n");
-        return r_io_desc_new (io, &r_io_plugin_nxdbg, pathname, R_IO_RW | R_IO_EXEC, mode, rnx);
-error:
-        r_io_nxdbg_free (rnx);
-        return NULL;
-}
-
-static int __close(RIODesc *fd) {
-	if (!fd || !fd->data) {
-		return -1;
-	}
-        r_usb_close();
-}
-
-static int __read(RIO *io, RIODesc *fd, ut8 *buf, int count) {
-        RIONxdbg *rnx;
-	if (!fd || !fd->data) {
-		return -1;
-	}
-	rnx = fd->data;
-        return count;
-}
-
-static int __write(RIO *io, RIODesc *fd, const ut8 *buf, int count) {
-        RIONxdbg *rnx;
-        DebuggerRequest req;
-	if (!fd || !fd->data) {
-		return -1;
-	}
-	rnx = fd->data;
-
-
-        return count;
-}
-
-RIOPlugin r_io_plugin_nxdbg = {
+RDebugPlugin r_debug_plugin_nxdbg = {
 	.name = "nxdbg",
-	.desc = "Nintendo switch backed IO for r2 nxdbg://[path]",
 	.license = "MIT",
-	.open = __open,
-	.close = __close,
-	//.read = __read,
-	// .check = __plugin_open,
-	// .lseek = __lseek,
-	.write = __write,
-	// .system = __system,
+	.arch = "arm",
+        .bits = R_SYS_BITS_64,
+	.init = &r_debug_nxdbg_init,
+	// .step = &r_debug_nxdbg_step,
+	// .cont = &r_debug_nxdbg_continue,
+	.attach = &r_debug_nxdbg_attach,
+	// .detach = &r_debug_nxdbg_detach,
+	.pids = &r_debug_nxdbg_pids,
+	// .wait = &r_debug_nxdbg_wait,
+	// .select = &r_debug_nxdbg_select,
+	// .breakpoint = (RBreakpointCallback)&r_debug_nxdbg_breakpoint,
+	// .reg_read = &r_debug_nxdbg_reg_read,
+	// .reg_write = &r_debug_nxdbg_reg_write,
+	// .reg_profile = &r_debug_nxdbg_reg_profile
 };
+
 #ifndef CORELIB
 RLibStruct radare_plugin = {
 	.type = R_LIB_TYPE_IO,
-	.data = &r_io_plugin_nxdbg,
+	.data = &r_debug_plugin_nxdbg,
 	.version = R2_VERSION
 };
 #endif
