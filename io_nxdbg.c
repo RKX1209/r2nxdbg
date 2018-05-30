@@ -11,9 +11,9 @@
 #include "nxdbg.h"
 
 #define VENDOR_ID 0x057e
-#define PRODUCT_ID 0x3000
+#define PRODUCT_ID 0x2000
 
-extern RIOPlugin r_io_plugin_nxdbg;
+RIOPlugin r_io_plugin_nxdbg;
 
 struct usb_bus *r_usb_init() {
         usb_init();
@@ -76,7 +76,7 @@ void r_usb_close(usb_dev_handle *handle) {
 }
 
 static bool __check(RIO *io, const char *pathname, bool many) {
-	return g_str_has_prefix (pathname, "nxdbg://");
+	return (!strncmp (pathname, "nxdbg://", 8));
 }
 
 static RIODesc *__open(RIO *io, const char *pathname, int rw, int mode) {
@@ -86,6 +86,7 @@ static RIODesc *__open(RIO *io, const char *pathname, int rw, int mode) {
         usb_dev_handle *handle;
 
         rnx = r_nxdbg_new (io);
+        io->cb_printf ("open\n");
         if (!rnx) {
                 goto error;
         }
@@ -145,16 +146,15 @@ static int __write(RIO *io, RIODesc *fd, const ut8 *buf, int count) {
 
 RIOPlugin r_io_plugin_nxdbg = {
 	.name = "nxdbg",
-	.desc = "Nintendo switch backed IO for r2 nxdbg://[path]",
+	.desc = "Nintendo switch backed IO for nxdbg://[path]",
 	.license = "MIT",
 	.open = __open,
 	.close = __close,
 	.read = __read,
-	// .check = __plugin_open,
-	// .lseek = __lseek,
-	.write = __write,
-	// .system = __system,
+	.check = __check,
+	.write = __write
 };
+
 #ifndef CORELIB
 RLibStruct radare_plugin = {
 	.type = R_LIB_TYPE_IO,

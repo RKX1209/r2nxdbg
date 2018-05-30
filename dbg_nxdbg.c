@@ -13,6 +13,7 @@
 RNxdbg *rnx;
 
 static int r_debug_nxdbg_init(RDebug *dbg) {
+        eprintf("nxdbg_init\n");
 	return true;
 }
 
@@ -86,7 +87,7 @@ RDebugPlugin r_debug_plugin_nxdbg = {
 
 #ifndef CORELIB
 RLibStruct radare_plugin = {
-	.type = R_LIB_TYPE_IO,
+	.type = R_LIB_TYPE_DBG,
 	.data = &r_debug_plugin_nxdbg,
 	.version = R2_VERSION
 };
