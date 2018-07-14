@@ -1,5 +1,5 @@
 # r2nxdbg
-Nintendo switch debugger for radare2
+Nintendo switch debugger for radare2.  
 Still WIP project due to USB connection problem of libnx [#109](https://github.com/switchbrew/libnx/issues/109).
 ## Install
 r2nxdbg requires libusb.
