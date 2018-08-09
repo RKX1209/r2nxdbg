@@ -3,8 +3,9 @@
 #include <stdio.h>
 #include <malloc.h>
 #include <sys/socket.h>
+#include <sys/errno.h>
 #include <arpa/inet.h>
-
+#include <unistd.h>
 #include <switch.h>
 
 int listen_fd, client_fd;
@@ -133,7 +134,7 @@ int handleCommand() {
 
     printf("Handle Command\n");
 
-    if((num_bytes = recv(client_fd, &req, sizeof(req), 0)) < 0) {
+    if((num_bytes = read(client_fd, &req, sizeof(req))) < 0) {
 	printf("failed to recv");
         return 1;
     }
@@ -356,7 +357,8 @@ int handleCommand() {
 
     default:
         // Unknown request.
-        fatalSimple(222 | (2 << 9));
+        printf("Unknown request %d\n", req.Type);
+        return 0;
     }
 
     return 1;
@@ -395,12 +397,13 @@ int main(int argc, char *argv[])
         printf("socketInit = %d\n", rc);
 
         if (rc) {
-                printf("Failed Socket interface\n");
-                fatalSimple(rc);
+                printf("failed socket init\n");
+                goto fatal;
         }
 
         if ((listen_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-                goto error;
+                printf("failed socket\n");
+                goto fatal;
         }
 
         if(bind(listen_fd, (struct sockaddr*) &bind_addr, sizeof(bind_addr)) < 0) {
@@ -410,11 +413,6 @@ int main(int argc, char *argv[])
 
 	if(listen(listen_fd, 20) != 0) {
 		printf("failed to listen on socket\n");
-		goto error;
-	}
-
-	if((client_fd = accept(listen_fd, (struct sockaddr*) &remote_addr, &remote_addr_len)) < 0) {
-		printf("failed to accept\n");
 		goto error;
 	}
 
@@ -431,14 +429,21 @@ int main(int argc, char *argv[])
 
                 if (kDown & KEY_PLUS) break; // break in order to return to hbmenu
 
+	        if((client_fd = accept(listen_fd, (struct sockaddr*) &remote_addr, &remote_addr_len)) < 0) {
+		       printf("failed to accept\n");
+		       goto error;
+	        }
+
                 handleCommand();
 
                 gfxFlushBuffers();
                 gfxSwapBuffers();
                 gfxWaitForVsync();
+                close (client_fd);
         }
-
 error:
+        close (listen_fd);
+fatal:
         gfxExit();
         return 0;
 }

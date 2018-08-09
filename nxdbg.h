@@ -1,11 +1,8 @@
 #ifndef _NXDBG_H_
 #define _NXDBG_H_
 
-#include <usb.h>
-
 typedef struct {
-        /* For IO plugin */
-        usb_dev_handle *handle;
+        int fd;
 } RNxdbg;
 
 typedef struct {

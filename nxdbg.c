@@ -2,7 +2,6 @@
 
 #include <r_core.h>
 #include <r_lib.h>
-#include <usb.h>
 #include "nxdbg.h"
 
 #define EP_IN   0x80
@@ -24,28 +23,22 @@ void r_nxdbg_free(RNxdbg *rnx) {
 }
 
 static void nxdbg_request_cmd(RNxdbg *rnx, uint32_t type) {
-        usb_dev_handle *handle = rnx->handle;
+        int socket = rnx->fd;
         DebuggerRequest req;
         req.type = 0;
         /* TODO: handle endian */
-        int res = usb_bulk_write(handle, EP_OUT, (char *)&req, sizeof(DebuggerRequest), 1000);
-        eprintf("bulk_write(%p, 0x%x, %p, %lu, %d) res: %d\n", (void *)handle, EP_OUT, (void *)&req, sizeof(DebuggerRequest), 1000, res);
+        write(socket, (char *)&req, sizeof(DebuggerRequest));
+        eprintf("send(%d, %p, %lu)\n", socket, (void *)&req, sizeof(DebuggerRequest));
 }
 
 DebuggerResponse nxdbg_get_response(RNxdbg *rnx) {
-        usb_dev_handle *handle = rnx->handle;
+        int socket = rnx->fd;
         DebuggerResponse resp;
         /* TODO: handle endian */
-        int res;
-        do {
-                res = usb_bulk_read(handle, EP_IN, (char *)&resp, sizeof(DebuggerResponse), 1000);
-        } while (res != 0);
-        eprintf("bulk_read(%p, 0x%x, %p, %lu, %d) res: %d\n", (void *)handle, EP_IN, (void *)&resp, sizeof(DebuggerResponse), 1000, res);
+        ssize_t res = read(socket, (void *)&resp, sizeof(DebuggerResponse));
+        eprintf("recv(%d, %p, %lu) res: %ld\n", socket, (void *)&resp, sizeof(DebuggerRequest), res);
         eprintf("Response: length(%d), result(%d)\n", resp.lenbytes, resp.result);
         return resp;
-        /* while (resp.lenbytes != 0) {
-
-        } */
 }
 
 RList *nxdbg_list_process(RNxdbg *rnx) {
