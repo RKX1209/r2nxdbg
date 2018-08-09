@@ -28,15 +28,21 @@ static void nxdbg_request_cmd(RNxdbg *rnx, uint32_t type) {
         DebuggerRequest req;
         req.type = 0;
         /* TODO: handle endian */
-        usb_bulk_write(handle, EP_OUT, (char *)&req, sizeof(DebuggerRequest), 1000);
+        int res = usb_bulk_write(handle, EP_OUT, (char *)&req, sizeof(DebuggerRequest), 1000);
+        eprintf("bulk_write(%p, 0x%x, %p, %lu, %d) res: %d\n", (void *)handle, EP_OUT, (void *)&req, sizeof(DebuggerRequest), 1000, res);
 }
 
-static void nxdbg_get_response(RNxdbg *rnx) {
+DebuggerResponse nxdbg_get_response(RNxdbg *rnx) {
         usb_dev_handle *handle = rnx->handle;
         DebuggerResponse resp;
         /* TODO: handle endian */
-        usb_bulk_read(handle, EP_IN, (char *)&resp, sizeof(DebuggerResponse), 1000);
+        int res;
+        do {
+                res = usb_bulk_read(handle, EP_IN, (char *)&resp, sizeof(DebuggerResponse), 1000);
+        } while (res != 0);
+        eprintf("bulk_read(%p, 0x%x, %p, %lu, %d) res: %d\n", (void *)handle, EP_IN, (void *)&resp, sizeof(DebuggerResponse), 1000, res);
         eprintf("Response: length(%d), result(%d)\n", resp.lenbytes, resp.result);
+        return resp;
         /* while (resp.lenbytes != 0) {
 
         } */
@@ -47,6 +53,7 @@ RList *nxdbg_list_process(RNxdbg *rnx) {
         if (!ret) {
                 return NULL;
         }
+        eprintf("list process\n");
         nxdbg_request_cmd (rnx, 0);
         nxdbg_get_response (rnx);
         return ret;

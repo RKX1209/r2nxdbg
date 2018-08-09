@@ -46,6 +46,7 @@ struct usb_dev_handle *r_usb_open(struct usb_device *dev) {
 		if(usb_detach_kernel_driver_np(udev, dev->config->interface->altsetting->bInterfaceNumber) < 0 ) {
 			eprintf("usb_set_configuration Error.\n");
 			eprintf("usb_detach_kernel_driver_np Error.(%s)\n",usb_strerror());
+                        goto error;
  		}
 	}
 
@@ -53,12 +54,14 @@ struct usb_dev_handle *r_usb_open(struct usb_device *dev) {
 		if(usb_detach_kernel_driver_np(udev,dev->config->interface->altsetting->bInterfaceNumber) < 0 ) {
 			eprintf("usb_claim_interface Error.\n");
 			eprintf("usb_detach_kernel_driver_np Error.(%s)\n",usb_strerror());
+                        goto error;
 		}
 	}
 
 	if(usb_claim_interface(udev, dev->config->interface->altsetting->bInterfaceNumber) < 0 ){
 		eprintf("usb_claim_interface Error.(%s)\n",usb_strerror());
-	}
+                goto error;
+        }
 
 	return udev;
 error:
@@ -121,6 +124,7 @@ static int __close(RIODesc *fd) {
         rnx = fd->data;
         r_usb_close(rnx->handle);
         r_nxdbg_free (rnx);
+        eprintf("closed usb\n");        
 }
 
 static int __read(RIO *io, RIODesc *fd, ut8 *buf, int count) {

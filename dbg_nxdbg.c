@@ -17,6 +17,12 @@ static int r_debug_nxdbg_init(RDebug *dbg) {
 	return true;
 }
 
+static RDebugReasonType r_debug_nxdbg_wait(RDebug *dbg, int pid) {
+        DebuggerResponse resp;
+        eprintf("nxdbg waiting...\n");
+        resp = nxdbg_get_response (rnx);
+}
+
 static int r_debug_nxdbg_attach(RDebug *dbg, int pid) {
         RIODesc *desc = dbg->iob.io->desc;
         eprintf("nxdbg attach\n");
@@ -39,8 +45,17 @@ static int r_debug_nxdbg_attach(RDebug *dbg, int pid) {
 }
 
 static RList *r_debug_nxdbg_pids(RDebug *dbg, int pid) {
+        RIODesc *desc = dbg->iob.io->desc;
 	RListIter *it;
+
         eprintf("nxdbg pids\n");
+
+        rnx = (RNxdbg *) desc->data;
+
+        if (!rnx) {
+                return NULL;
+        }
+
 	RList *ret = r_list_newf (free);
 	if (!ret) {
 		return NULL;
@@ -50,6 +65,7 @@ static RList *r_debug_nxdbg_pids(RDebug *dbg, int pid) {
 	if (!pids) {
 		return ret;
 	}
+
 	// r_list_foreach (pids, it, p) {
 	// 	RDebugPid *newpid = R_NEW0 (RDebugPid);
 	// 	if (!newpid) {
@@ -77,7 +93,7 @@ RDebugPlugin r_debug_plugin_nxdbg = {
 	.attach = &r_debug_nxdbg_attach,
 	// .detach = &r_debug_nxdbg_detach,
 	.pids = &r_debug_nxdbg_pids,
-	// .wait = &r_debug_nxdbg_wait,
+	.wait = &r_debug_nxdbg_wait,
 	// .select = &r_debug_nxdbg_select,
 	// .breakpoint = (RBreakpointCallback)&r_debug_nxdbg_breakpoint,
 	// .reg_read = &r_debug_nxdbg_reg_read,

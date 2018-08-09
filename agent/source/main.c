@@ -1,19 +1,13 @@
-// Copyright 2017 plutoo
+/* r2nxdbg agent - MIT - Copyright 2018 - rkx1209(rkx1209dev@gmail.com) */
+#include <string.h>
+#include <stdio.h>
+#include <malloc.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+
 #include <switch.h>
 
-u32 __nx_applet_type = AppletType_None;
-
-static char g_heap[0x20000];
-
-void __libnx_initheap(void)
-{
-    extern char* fake_heap_start;
-    extern char* fake_heap_end;
-
-    fake_heap_start = &g_heap[0];
-    fake_heap_end   = &g_heap[sizeof g_heap];
-}
-
+int listen_fd, client_fd;
 typedef enum {
     REQ_LIST_PROCESSES   =0,
     REQ_ATTACH_PROCESS   =1,
@@ -124,27 +118,32 @@ typedef struct {
 } GetTitlePidResp;
 
 
-void sendUsbResponse(DebuggerResponse resp) {
-    usbCommsWrite((void*)&resp, 8);
+void sendResponse(DebuggerResponse resp) {
+    send(client_fd, (void*)&resp, 8, 0);
 
     if (resp.LenBytes > 0)
-        usbCommsWrite(resp.Data, resp.LenBytes);
+        send(client_fd, resp.Data, resp.LenBytes, 0);
 }
 
-int handleUsbCommand() {
-    DebuggerRequest r;
+int handleCommand() {
+    DebuggerRequest req;
     DebuggerResponse resp;
     Result rc;
+    ssize_t num_bytes;
 
-    size_t len = usbCommsRead(&r, sizeof(r));
-    if (len != sizeof(r))
-        // USB transfer failure.
-        fatalSimple(222 | (1 << 9));
+    printf("Handle Command\n");
+
+    if((num_bytes = recv(client_fd, &req, sizeof(req), 0)) < 0) {
+	printf("failed to recv");
+        return 1;
+    }
 
     resp.LenBytes = 0;
     resp.Data = NULL;
 
-    switch (r.Type) {
+    printf("Read: %lu Req: %d", num_bytes, req.Type);
+
+    switch (req.Type) {
     case REQ_LIST_PROCESSES: { // Cmd0
         static u64 pids[256];
         u32 numOut = 256;
@@ -157,13 +156,13 @@ int handleUsbCommand() {
             resp.Data = &pids[0];
         }
 
-        sendUsbResponse(resp);
+        sendResponse(resp);
         break;
     }
     case REQ_ATTACH_PROCESS: { // Cmd1
         AttachProcessReq   req_;
         AttachProcessResp  resp_;
-        usbCommsRead(&req_, sizeof(req_));
+        recv(client_fd, &req_, sizeof(req_), 0);
 
         rc = svcDebugActiveProcess(&resp_.DbgHandle, req_.Pid);
         resp.Result = rc;
@@ -173,25 +172,25 @@ int handleUsbCommand() {
             resp.Data = &resp_;
         }
 
-        sendUsbResponse(resp);
+        sendResponse(resp);
         break;
     }
 
     case REQ_DETACH_PROCESS: { // Cmd2
         DetachProcessReq req_;
-        usbCommsRead(&req_, sizeof(req_));
+        recv(client_fd, &req_, sizeof(req_), 0);
 
         rc = svcCloseHandle(req_.DbgHandle);
         resp.Result = rc;
 
-        sendUsbResponse(resp);
+        sendResponse(resp);
         break;
     }
 
     case REQ_QUERYMEMORY: { // Cmd3
         QueryMemoryReq   req_;
         QueryMemoryResp  resp_;
-        usbCommsRead(&req_, sizeof(req_));
+        recv(client_fd, &req_, sizeof(req_), 0);
 
         MemoryInfo info;
         u32 who_cares;
@@ -208,14 +207,14 @@ int handleUsbCommand() {
             resp.Data = &resp_;
         }
 
-        sendUsbResponse(resp);
+        sendResponse(resp);
         break;
     }
 
     case REQ_GET_DBGEVENT: { // Cmd4
         GetDbgEventReq   req_;
         GetDbgEventResp  resp_;
-        usbCommsRead(&req_, sizeof(req_));
+        recv(client_fd, &req_, sizeof(req_), 0);
 
         rc = svcGetDebugEvent(&resp_.Event[0], req_.DbgHandle);
         resp.Result = rc;
@@ -225,13 +224,13 @@ int handleUsbCommand() {
             resp.Data = &resp_;
         }
 
-        sendUsbResponse(resp);
+        sendResponse(resp);
         break;
     }
 
     case REQ_READMEMORY: { // Cmd5
         ReadMemoryReq req_;
-        usbCommsRead(&req_, sizeof(req_));
+        recv(client_fd, &req_, sizeof(req_), 0);
 
         if (req_.Size > 0x1000)
             // Too big read.
@@ -246,25 +245,25 @@ int handleUsbCommand() {
             resp.Data = &page[0];
         }
 
-        sendUsbResponse(resp);
+        sendResponse(resp);
         break;
     }
 
     case REQ_CONTINUE_DBGEVENT: { // Cmd6
         ContinueDbgEventReq req_;
-        usbCommsRead(&req_, sizeof(req_));
+        recv(client_fd, &req_, sizeof(req_), 0);
 
         rc = svcContinueDebugEvent(req_.DbgHandle, req_.Flags, req_.ThreadId);
         resp.Result = rc;
 
-        sendUsbResponse(resp);
+        sendResponse(resp);
         break;
     }
 
     case REQ_GET_THREADCONTEXT: { // Cmd7
         GetThreadContextReq   req_;
         GetThreadContextResp  resp_;
-        usbCommsRead(&req_, sizeof(req_));
+        recv(client_fd, &req_, sizeof(req_), 0);
 
         rc = svcGetDebugThreadContext(&resp_.Out[0], req_.DbgHandle, req_.ThreadId, req_.Flags);
         resp.Result = rc;
@@ -274,29 +273,29 @@ int handleUsbCommand() {
             resp.Data = &resp_;
         }
 
-        sendUsbResponse(resp);
+        sendResponse(resp);
         break;
     }
 
     case REQ_BREAK_PROCESS: { // Cmd8
         BreakProcessReq req_;
-        usbCommsRead(&req_, sizeof(req_));
+        recv(client_fd, &req_, sizeof(req_), 0);
 
         rc = svcBreakDebugProcess(req_.DbgHandle);
         resp.Result = rc;
 
-        sendUsbResponse(resp);
+        sendResponse(resp);
         break;
     }
 
     case REQ_WRITEMEMORY32: { // Cmd9
         WriteMemory32Req req_;
-        usbCommsRead(&req_, sizeof(req_));
+        recv(client_fd, &req_, sizeof(req_), 0);
 
         rc = svcWriteDebugProcessMemory(req_.DbgHandle, (void*)&req_.Value, req_.Addr, 4);
         resp.Result = rc;
 
-        sendUsbResponse(resp);
+        sendResponse(resp);
         break;
     }
 
@@ -308,7 +307,7 @@ int handleUsbCommand() {
         if (rc == 0)
             svcCloseHandle(h);
 
-        sendUsbResponse(resp);
+        sendResponse(resp);
         break;
     }
 
@@ -323,25 +322,25 @@ int handleUsbCommand() {
             resp.Data = &resp_;
         }
 
-        sendUsbResponse(resp);
+        sendResponse(resp);
         break;
     }
 
     case REQ_START_PROCESS: { // Cmd12
         StartProcessReq req_;
-        usbCommsRead(&req_, sizeof(req_));
+        recv(client_fd, &req_, sizeof(req_), 0);
 
         rc = pmdmntStartProcess(req_.Pid);
         resp.Result = rc;
 
-        sendUsbResponse(resp);
+        sendResponse(resp);
         break;
     }
 
     case REQ_GET_TITLE_PID: { // Cmd13
         GetTitlePidReq   req_;
         GetTitlePidResp  resp_;
-        usbCommsRead(&req_, sizeof(req_));
+        recv(client_fd, &req_, sizeof(req_), 0);
 
         rc = pmdmntGetTitlePid(&resp_.Pid, req_.TitleId);
         resp.Result = rc;
@@ -351,7 +350,7 @@ int handleUsbCommand() {
             resp.Data = &resp_;
         }
 
-        sendUsbResponse(resp);
+        sendResponse(resp);
         break;
     }
 
@@ -365,19 +364,81 @@ int handleUsbCommand() {
 
 int main(int argc, char *argv[])
 {
-    Result rc;
+        Result rc;
+        char bind_ip_addr[4] = {0, 0, 0, 0};
 
-    rc = pmdmntInitialize();
-    if (rc)
-        // Failed to get PM debug interface.
-        fatalSimple(222 | (6 << 9));
+	struct sockaddr_in bind_addr = {
+		.sin_family = AF_INET,
+		.sin_port = htons(4444),
+		.sin_addr = {
+			.s_addr = *(uint32_t*) bind_ip_addr
+		}
+	};
+        struct sockaddr_in remote_addr;
+        socklen_t remote_addr_len = sizeof(remote_addr);
 
-    rc = usbCommsInitialize();
-    if (rc)
-        fatalSimple(rc);
+        gfxInitDefault();
+        consoleInit(NULL);
 
-    while (handleUsbCommand());
+        printf(CONSOLE_ESC(2J));
 
-    return 0;
+        printf("Launch Nxdbg agent\n");
+
+        rc = pmdmntInitialize();
+        printf("pmdmntInit = %d\n", rc);
+        if (rc) {
+                //Failed to get PM debug interface.
+                printf(CONSOLE_ESC(28D)"Failed PM debug interface\n");
+                fatalSimple(222 | (6 << 9));
+        }
+        rc = socketInitializeDefault();
+        printf("socketInit = %d\n", rc);
+
+        if (rc) {
+                printf("Failed Socket interface\n");
+                fatalSimple(rc);
+        }
+
+        if ((listen_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+                goto error;
+        }
+
+        if(bind(listen_fd, (struct sockaddr*) &bind_addr, sizeof(bind_addr)) < 0) {
+		printf("failed to bind socket\n");
+		goto error;
+	}
+
+	if(listen(listen_fd, 20) != 0) {
+		printf("failed to listen on socket\n");
+		goto error;
+	}
+
+	if((client_fd = accept(listen_fd, (struct sockaddr*) &remote_addr, &remote_addr_len)) < 0) {
+		printf("failed to accept\n");
+		goto error;
+	}
+
+        printf("Agent init\n");
+        while(appletMainLoop())
+        {
+                //Scan all the inputs. This should be done once for each frame
+                hidScanInput();
+
+                // Your code goes here
+
+                //hidKeysDown returns information about which buttons have been just pressed (and they weren't in the previous frame)
+                u64 kDown = hidKeysDown(CONTROLLER_P1_AUTO);
+
+                if (kDown & KEY_PLUS) break; // break in order to return to hbmenu
+
+                handleCommand();
+
+                gfxFlushBuffers();
+                gfxSwapBuffers();
+                gfxWaitForVsync();
+        }
+
+error:
+        gfxExit();
+        return 0;
 }
-

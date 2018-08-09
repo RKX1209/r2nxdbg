@@ -1,5 +1,5 @@
-R2NXDBG_IO=io_r2nxdbg
-R2NXDBG_DBG=dbg_r2nxdbg
+R2NXDBG_IO=io_nxdbg
+R2NXDBG_DBG=dbg_nxdbg
 IO_OBJS=io_nxdbg.c nxdbg.c
 DBG_OBJS=dbg_nxdbg.c nxdbg.c
 CC=gcc
