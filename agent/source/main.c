@@ -132,9 +132,9 @@ int handleCommand() {
     Result rc;
     ssize_t num_bytes;
 
-    printf("Handle Command\n");
+    printf("Handle Command socket:%d\n", client_fd);
 
-    if((num_bytes = read(client_fd, &req, sizeof(req))) < 0) {
+    if((num_bytes = recv(client_fd, &req, sizeof(req), 0)) < 0) {
 	printf("failed to recv");
         return 1;
     }
@@ -142,14 +142,14 @@ int handleCommand() {
     resp.LenBytes = 0;
     resp.Data = NULL;
 
-    printf("Read: %lu Req: %d", num_bytes, req.Type);
+    printf("Read: %lu Req: %d\n", num_bytes, req.Type);
 
     switch (req.Type) {
     case REQ_LIST_PROCESSES: { // Cmd0
         static u64 pids[256];
         u32 numOut = 256;
-
-        rc = svcGetProcessList(&numOut, pids, numOut);
+        printf("GetProcess\n");
+        //rc = svcGetProcessList(&numOut, pids, numOut);
         resp.Result = rc;
 
         if (rc == 0) {
@@ -360,7 +360,6 @@ int handleCommand() {
         printf("Unknown request %d\n", req.Type);
         return 0;
     }
-
     return 1;
 }
 

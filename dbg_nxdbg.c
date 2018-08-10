@@ -25,7 +25,7 @@ static RDebugReasonType r_debug_nxdbg_wait(RDebug *dbg, int pid) {
 
 static int r_debug_nxdbg_attach(RDebug *dbg, int pid) {
         RIODesc *desc = dbg->iob.io->desc;
-        eprintf("nxdbg attach\n");
+        eprintf("nxdbg attach pid: %d\n", pid);
 	if (!desc || !desc->plugin || !desc->plugin->name || !desc->data) {
 		return false;
 	}
@@ -47,6 +47,7 @@ static int r_debug_nxdbg_attach(RDebug *dbg, int pid) {
 static RList *r_debug_nxdbg_pids(RDebug *dbg, int pid) {
         RIODesc *desc = dbg->iob.io->desc;
 	RListIter *it;
+        uint64_t *p;
 
         eprintf("nxdbg pids\n");
 
@@ -66,20 +67,25 @@ static RList *r_debug_nxdbg_pids(RDebug *dbg, int pid) {
 		return ret;
 	}
 
-	// r_list_foreach (pids, it, p) {
-	// 	RDebugPid *newpid = R_NEW0 (RDebugPid);
-	// 	if (!newpid) {
-	// 		r_list_free (ret);
-	// 		return NULL;
-	// 	}
-	// 	newpid->path = strdup (p->name);
-	// 	newpid->pid = p->uniqueid;
-	// 	newpid->status = 's';
-	// 	newpid->runnable = true;
-	// 	r_list_append (ret, newpid);
-	// }
-	// r_list_free (pids);
+	r_list_foreach (pids, it, p) {
+		RDebugPid *newpid = R_NEW0 (RDebugPid);
+		if (!newpid) {
+			r_list_free (ret);
+			return NULL;
+		}
+		newpid->path = "nxproc";
+		newpid->pid = *p;
+		newpid->status = 's';
+		newpid->runnable = true;
+		r_list_append (ret, newpid);
+	}
+	r_list_free (pids);
 	return ret;
+}
+
+static int r_debug_nxdbg_select(int pid, int tid) {
+        eprintf("select\n");
+        return true;
 }
 
 RDebugPlugin r_debug_plugin_nxdbg = {
@@ -94,7 +100,7 @@ RDebugPlugin r_debug_plugin_nxdbg = {
 	// .detach = &r_debug_nxdbg_detach,
 	.pids = &r_debug_nxdbg_pids,
 	.wait = &r_debug_nxdbg_wait,
-	// .select = &r_debug_nxdbg_select,
+	.select = &r_debug_nxdbg_select,
 	// .breakpoint = (RBreakpointCallback)&r_debug_nxdbg_breakpoint,
 	// .reg_read = &r_debug_nxdbg_reg_read,
 	// .reg_write = &r_debug_nxdbg_reg_write,

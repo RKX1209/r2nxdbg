@@ -27,7 +27,7 @@ static void nxdbg_request_cmd(RNxdbg *rnx, uint32_t type) {
         DebuggerRequest req;
         req.type = 0;
         /* TODO: handle endian */
-        write(socket, (char *)&req, sizeof(DebuggerRequest));
+        send(socket, (char *)&req, sizeof(DebuggerRequest), 0);
         eprintf("send(%d, %p, %lu)\n", socket, (void *)&req, sizeof(DebuggerRequest));
 }
 
