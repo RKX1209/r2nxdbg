@@ -43,11 +43,26 @@ DebuggerResponse nxdbg_get_response(RNxdbg *rnx) {
 
 RList *nxdbg_list_process(RNxdbg *rnx) {
         RList *ret = r_list_newf (free);
+        DebuggerResponse resp;
+        ssize_t res;
+        int p, num;
         if (!ret) {
                 return NULL;
         }
         eprintf("list process\n");
+
         nxdbg_request_cmd (rnx, 0);
-        nxdbg_get_response (rnx);
+
+        resp = nxdbg_get_response (rnx);
+        num = resp.lenbytes / sizeof(uint64_t);
+
+        if (resp.lenbytes > 0) {
+                for (p = 0; p < num; p++) {
+                        uint64_t *pid = calloc (1, sizeof(uint64_t));
+                        res = read(rnx->fd, (void *)pid, sizeof(uint64_t));
+                        r_list_append(ret, pid);
+                }
+        }
+
         return ret;
 }
